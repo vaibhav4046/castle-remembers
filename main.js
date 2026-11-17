@@ -180,10 +180,15 @@ const LIGHTS = [
   [8.5, 2.6, 13.5, 1.1, 10],   // courtyard brazier
   [7.8, 2.2, -5.8, 0.7, 5],    // clock corner
   [8.5, 3.2, 25, 1.8, 12],     // entrance hall candles
-  [17, 2.4, 12.5, 0.9, 7],     // corridor sconce
-  [29, 2.0, 12.5, 2.0, 9],     // common room fireplace
-  [22, 2.2, 13, 0.8, 6],       // common room lamp
-  [-7, 1.6, 21, 1.4, 8],       // dungeon cauldron glow
+  [17, 2.4, 12.5, 2.2, 12],    // corridor sconce
+  [13.5, 2.4, 12.5, 1.4, 9],   // corridor sconce west
+  [20.5, 2.4, 12.5, 1.4, 9],   // corridor sconce east
+  [29, 2.0, 12.5, 3.2, 11],    // common room fireplace
+  [22, 2.2, 13, 1.8, 8],       // common room lamp
+  [24.8, 3.4, 12.5, 1.6, 10],  // common room chandelier
+  [-7, 1.6, 21, 2.8, 10],      // dungeon cauldron glow
+  [-11.5, 2.4, 21, 1.3, 8],    // dungeon torch west
+  [-2.5, 2.4, 23.5, 1.3, 8],   // dungeon torch east
   [-8, 3.0, -12, 0.7, 8],      // owlery moon shaft
   [15, 2.2, -11, 0.9, 9],      // astronomy tower starlight
 ];
