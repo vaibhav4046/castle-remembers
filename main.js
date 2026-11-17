@@ -265,6 +265,7 @@ addEventListener('resize', () => {
 });
 
 // --- Post-processing: bloom + warm colour grade + vignette (Hogwarts-Legacy-style mood) ---
+const NOBLOOM = new URLSearchParams(location.search).has('nobloom');
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.65, 0.72);
@@ -1217,7 +1218,7 @@ function animate() {
     }
   }
 
-  composer.render();
+  if (NOBLOOM) renderer.render(scene, camera); else composer.render();
 }
 
 buildCastle();
