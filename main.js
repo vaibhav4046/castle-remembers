@@ -266,6 +266,7 @@ addEventListener('resize', () => {
 
 // --- Post-processing: bloom + warm colour grade + vignette (Hogwarts-Legacy-style mood) ---
 const NOBLOOM = new URLSearchParams(location.search).has('nobloom');
+let bloomAutoOff = false, perfFrames = 0, perfAccum = 0;
 const TOD = new URLSearchParams(location.search).get('tod'); // 'day'|'night' locks the sky for demos/QA
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -424,23 +425,37 @@ function makeFigure(tint, skin) {
   head.position.y = 1.56;
   const hood = new THREE.Mesh(new THREE.ConeGeometry(0.19, 0.34, 10), robeMat);
   hood.position.y = 1.7;
-  const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.62, 8), robeMat);
-  armL.position.set(-0.3, 1.05, 0); armL.rotation.z = 0.25;
-  const armR = armL.clone(); armR.position.x = 0.3; armR.rotation.z = -0.25;
-  // hem flare, belt, hands and eyes for a less plain silhouette
+  // segmented arms on shoulder pivots (swing at the shoulder, bent forearms)
+  const handMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7 });
+  function makeArm(side) {
+    const piv = new THREE.Group();
+    piv.position.set(0.3 * side, 1.3, 0);
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.3, 8), robeMat);
+    upper.position.y = -0.15;
+    const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.28, 8), robeMat);
+    fore.position.set(0, -0.42, 0.04); fore.rotation.x = -0.22;
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), handMat);
+    hand.position.set(0, -0.58, 0.1);
+    piv.add(upper, fore, hand);
+    piv.rotation.z = 0.22 * side;
+    return piv;
+  }
+  const armL = makeArm(-1);
+  const armR = makeArm(1);
+  // hem flare, belt, neck, eyes, hat brim - a readable little humanoid
   const hem = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.55, 12), robeMat);
   hem.position.y = 0.28;
   const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.24, 0.09, 12), new THREE.MeshStandardMaterial({ color: 0x2a221c, roughness: 0.8 }));
   belt.position.y = 0.95;
-  const handMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7 });
-  const handL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), handMat);
-  handL.position.set(-0.38, 0.72, 0.06);
-  const handR = handL.clone(); handR.position.x = 0.38;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 8), handMat);
+  neck.position.y = 1.47;
+  const brim = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.07, 12), robeMat);
+  brim.position.y = 1.63;
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.4 });
   const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 5), eyeMat);
   eyeL.position.set(-0.055, 1.58, 0.13);
   const eyeR = eyeL.clone(); eyeR.position.x = 0.055;
-  g.add(robe, shoulders, head, hood, armL, armR, hem, belt, handL, handR, eyeL, eyeR);
+  g.add(robe, shoulders, head, hood, armL, armR, hem, belt, neck, brim, eyeL, eyeR);
   return { group: g, head, hood, robe, shoulders, armL, armR };
 }
 
@@ -1416,7 +1431,16 @@ function animate() {
     }
   }
 
-  if (NOBLOOM) renderer.render(scene, camera); else composer.render();
+  // adaptive quality: if bloom post costs too much on this device, fall back to plain rendering
+  if (NOBLOOM || bloomAutoOff) renderer.render(scene, camera);
+  else {
+    const t0 = performance.now();
+    composer.render();
+    if (perfFrames < 12) {
+      perfAccum += performance.now() - t0; perfFrames++;
+      if (perfFrames === 12 && perfAccum / 12 > 250) bloomAutoOff = true;
+    }
+  }
 }
 
 buildCastle();
