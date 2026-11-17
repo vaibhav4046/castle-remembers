@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 // ============================================================
 // The Castle That Remembers
@@ -95,6 +100,31 @@ const ASSET_MANIFEST = [
     keepsake: true, label: 'the brass lantern', reach: 2.6 },
   { id: 'teacup',           h: 0.16, on: 'dining-table', dx: -0.7, dz: -0.2, rotY: 0, room: 'hall',
     keepsake: true, label: 'the porcelain teacup', reach: 2.6 },
+  // ---- Clutter pass (clones with variation; no extra downloads) ----
+  { id: 'bench#h1',         src: 'bench', h: 1.0, x: -2.2, z: -0.5, rotY: Math.PI/2, room: 'hall' },
+  { id: 'bench#h2',         src: 'bench', h: 1.0, x: 2.2, z: -0.5, rotY: -Math.PI/2, room: 'hall' },
+  { id: 'teacup#2',         src: 'teacup', h: 0.16, on: 'dining-table', dx: 0.2, dz: -0.4, rotY: 1.2, room: 'hall' },
+  { id: 'teacup#3',         src: 'teacup', h: 0.16, on: 'dining-table', dx: -0.2, dz: 0.5, rotY: 2.4, room: 'hall' },
+  { id: 'candelabra#h',     src: 'candelabra', h: 0.9, on: 'dining-table', dx: -1.4, dz: 0.1, rotY: 0, room: 'hall' },
+  { id: 'desk#2',           src: 'desk', h: 1.1, x: -18, z: 2.5, rotY: -Math.PI/2, room: 'library' },
+  { id: 'bookshelf#6',      src: 'bookshelf', h: 2.6, x: -12, z: 5.5, rotY: Math.PI, room: 'library' },
+  { id: 'teacup#4',         src: 'teacup', h: 0.16, on: 'desk', dx: 0, dz: -0.3, rotY: 0.7, room: 'library' },
+  { id: 'armchair#4',       src: 'armchair', h: 1.2, x: 10.2, z: 4, rotY: Math.PI/3, room: 'bedroom' },
+  { id: 'bench#k',          src: 'bench', h: 1.0, x: -7, z: 12, rotY: Math.PI/2, room: 'kitchen' },
+  { id: 'pantry-shelf#5',   src: 'pantry-shelf', h: 2.0, x: -11.5, z: 9, rotY: Math.PI/2, room: 'kitchen' },
+  { id: 'bench#2',          src: 'bench', h: 1.0, x: 13, z: 9.5, rotY: 0.4, room: 'courtyard' },
+  { id: 'gargoyle#2',       src: 'gargoyle', h: 1.2, x: 14.2, z: 17.8, rotY: -Math.PI/3, room: 'courtyard' },
+  { id: 'picture-frame#4',  src: 'picture-frame', h: 1.5, x: 2.4, z: 25, rotY: Math.PI/2, y: 1.7, room: 'entrance' },
+  { id: 'picture-frame#5',  src: 'picture-frame', h: 1.5, x: 14.6, z: 25, rotY: -Math.PI/2, y: 1.7, room: 'entrance' },
+  { id: 'picture-frame#6',  src: 'picture-frame', h: 1.4, x: 18.7, z: 10.5, rotY: -Math.PI/2, y: 1.5, room: 'corridor' },
+  { id: 'picture-frame#7',  src: 'picture-frame', h: 1.4, x: 18.7, z: 14.5, rotY: -Math.PI/2, y: 1.5, room: 'corridor' },
+  { id: 'desk#3',           src: 'desk', h: 1.1, x: 26, z: 15.8, rotY: Math.PI, room: 'common' },
+  { id: 'teacup#5',         src: 'teacup', h: 0.16, on: 'desk#3', dx: 0.2, dz: 0, rotY: 1.9, room: 'common' },
+  { id: 'cauldron#2',       src: 'cauldron', h: 0.85, x: -3, z: 24, rotY: 1.1, room: 'dungeon' },
+  { id: 'owl#4',            src: 'owl', h: 0.5, x: -6.5, z: -9.5, rotY: 3.0, y: 1.4, room: 'owlery' },
+  { id: 'bench#a',          src: 'bench', h: 0.95, x: 12, z: -14, rotY: 2.6, room: 'astronomy' },
+  { id: 'lantern#d',        src: 'lantern', h: 0.4, x: -11.4, z: 23, y: 0, rotY: 0.4, room: 'dungeon' },
+  { id: 'lantern#c',        src: 'lantern', h: 0.4, x: 15.3, z: 16.2, y: 0, rotY: 0, room: 'corridor' },
 ];
 
 // Walkable rectangles, in room order (slight overlaps at doorways)
@@ -231,7 +261,30 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
 });
+
+// --- Post-processing: bloom + warm colour grade + vignette (Hogwarts-Legacy-style mood) ---
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.65, 0.72);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, vignette: { value: 0.52 }, warmth: { value: 0.05 }, saturation: { value: 1.12 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float vignette; uniform float warmth; uniform float saturation; varying vec2 vUv;
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+      c.rgb = mix(vec3(l), c.rgb, saturation);                       // gentle saturation lift
+      c.rgb += warmth * vec3(1.0, 0.55, 0.25) * (1.0 - c.rgb) * l;   // warm glow in lit areas
+      float d = distance(vUv, vec2(0.5));
+      c.rgb *= mix(1.0, smoothstep(0.95, 0.45, d), vignette);        // vignette
+      gl_FragColor = c;
+    }`,
+};
+composer.addPass(new ShaderPass(GradeShader));
 
 // --- Atmosphere lights (day-night cycle driven) ---
 const hemi = new THREE.HemisphereLight(0x41527a, 0x2b2016, 0.95);
@@ -266,37 +319,300 @@ const fireLights = scene.children.filter(o => o.isPointLight);
   stars.name = 'stars';
   scene.add(stars);
   const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(3.2, 32),
-    new THREE.MeshBasicMaterial({ color: 0xe8ecf4, fog: false }));
+    new THREE.MeshBasicMaterial({ color: 0xe8ecf4, fog: false, transparent: true, opacity: 0.95 }));
+  moonDisc.name = 'moonDisc';
   moonDisc.position.set(46, 52, 60);
   moonDisc.lookAt(8, 0, 12);
   scene.add(moonDisc);
 }
 
+// --- Sky dome (dawn/day/dusk/night gradient) + sun disc ---
+const skyUni = {
+  top: { value: new THREE.Color(0x0b1026) },
+  horizon: { value: new THREE.Color(0x1a2338) },
+};
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(120, 24, 12), new THREE.ShaderMaterial({
+  uniforms: skyUni, side: THREE.BackSide, depthWrite: false, fog: false,
+  vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main(){ float h = clamp(normalize(vP).y * 1.4, 0.0, 1.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.55)), 1.0); }',
+}));
+skyDome.name = 'skyDome';
+scene.add(skyDome);
+const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(2.6, 32),
+  new THREE.MeshBasicMaterial({ color: 0xfff2cc, fog: false, transparent: true, opacity: 0 }));
+sunDisc.name = 'sunDisc';
+scene.add(sunDisc);
+
+// --- Fake volumetric light shafts (additive cones at windows/arches) ---
+function lightShaft(x, y, z, dx, dy, dz, len, r, color, opacity) {
+  const geo = new THREE.ConeGeometry(r, len, 24, 4, true);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false, fog: false,
+    uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: opacity }, uLen: { value: len } },
+    vertexShader: 'varying float vY; uniform float uLen; void main(){ vY = position.y / uLen + 0.5; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 uColor; uniform float uOpacity; varying float vY; void main(){ float a = uOpacity * smoothstep(0.0, 0.45, vY) * (0.25 + 0.75 * vY); gl_FragColor = vec4(uColor, a); }',
+  });
+  const m = new THREE.Mesh(geo, mat);
+  const dir = new THREE.Vector3(dx, dy, dz).normalize();
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().negate());
+  m.position.set(x + dir.x * len / 2, y + dir.y * len / 2, z + dir.z * len / 2);
+  m.renderOrder = 5;
+  scene.add(m);
+  return m;
+}
+lightShaft(-8.5, 3.6, -3.5, 1, -0.62, 0.15, 7, 1.5, 0x8fb4e8, 0.05);    // hall window moonbeam
+lightShaft(3.5, 3.6, -6.6, -0.1, -0.62, 1, 6.5, 1.3, 0xd88fb4, 0.045);  // stained-glass colour spill
+lightShaft(8.5, 4.8, 20.4, 0, -0.68, -1, 8, 1.7, 0x8fb4e8, 0.04);       // entrance arch beam
+
+// --- Castle residents (NPCs): robed figures with day/night routines and dialogue ---
+let gDayFactor = 0;
+const npcBubble = document.createElement('div');
+npcBubble.style.cssText = 'position:fixed;padding:6px 10px;background:rgba(20,16,28,0.9);color:#f0e6d2;border:1px solid #8a6d4a;border-radius:10px;font:13px Georgia,serif;max-width:280px;pointer-events:none;display:none;z-index:30;';
+document.body.appendChild(npcBubble);
+
+function makeFigure(tint, skin) {
+  const g = new THREE.Group();
+  const robeMat = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.9 });
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.5, 12), robeMat);
+  robe.position.y = 0.75;
+  const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 8), robeMat);
+  shoulders.position.y = 1.3; shoulders.scale.set(1.3, 0.7, 1);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7 }));
+  head.position.y = 1.56;
+  const hood = new THREE.Mesh(new THREE.ConeGeometry(0.19, 0.34, 10), robeMat);
+  hood.position.y = 1.7;
+  const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.62, 8), robeMat);
+  armL.position.set(-0.3, 1.05, 0); armL.rotation.z = 0.25;
+  const armR = armL.clone(); armR.position.x = 0.3; armR.rotation.z = -0.25;
+  g.add(robe, shoulders, head, hood, armL, armR);
+  return { group: g, head, armL, armR };
+}
+
+const NPC_DEFS = [
+  {
+    name: 'Maren the Keeper', tint: 0x6b4a8a, skin: 0xd9b08c,
+    day: [[0, -4, 5], [6.5, 6.8, 1], [8.5, 12, 8], [12, 16, 6], [6.5, 6.8, 1], [0, 3, 8], [-4, 0, 6]],
+    night: [[0, -5, 6], [6.5, 6.8, 1], [8.5, 10, 2], [15, 12, 1], [19, 12.5, 1], [24, 12.5, 12], [19, 12.5, 1], [15, 12, 1], [8.5, 10, 2], [6.5, 6.8, 1], [0, 0, 6]],
+    lines: {
+      day: ['Mind the candles - they drift lower when the hall wakes.', 'The castle keeps its own hours. I only keep the fire.', 'The fountain remembered rain long before the west wall stood.'],
+      night: ['Late for a wander. The portraits talk more after dark.', 'The fire never quite goes out here. I check it anyway.', 'If a keepsake glows for you, leave it a whisper. It will keep it safe.'],
+    },
+  },
+  {
+    name: 'Elowen the Scholar', tint: 0x2e4a7a, skin: 0xc99878,
+    day: [[-15, -3, 8], [-19, 3, 12], [-11, 2, 6], [-15, 4, 8], [-20, -3, 10]],
+    night: [[-9, 0, 1], [0, 2, 3], [9, 0, 1], [15, 0, 12], [9, 0, 1], [0, -2, 3], [-9, 0, 1], [-15, 0, 8]],
+    lines: {
+      day: ['Third shelf from the left remembers more than I do.', 'Quiet, please - the books are only pretending to sleep.', 'I catalogue what the castle chooses to recall.'],
+      night: ['Even the library dreams. Mostly index cards.', 'I read until the candles lean.', 'The dormitory beds argue less than the shelves.'],
+    },
+  },
+  {
+    name: 'Bram the Groundskeeper', tint: 0x3a5a34, skin: 0xb98a62,
+    day: [[8.5, 12, 6], [12, 17, 8], [8.5, 19, 1], [8.5, 25, 8], [8.5, 19, 1], [6.5, 6.8, 1], [0, -2, 2], [-6.5, -6.6, 1], [-8, -12, 10], [-6.5, -6.6, 1], [0, -4, 2], [6.5, 6.8, 1]],
+    night: [[8.5, 25, 10], [8.5, 19, 1], [6.5, 6.8, 1], [9, 0, 1], [15, 0, 14], [9, 0, 1], [6.5, 6.8, 1], [8.5, 19, 1]],
+    lines: {
+      day: ['The fountain is older than the west wall. It remembers rain.', 'Owls had me up before the sun. They always win.', 'Grass grows slower where the castle watches.'],
+      night: ['The grounds keep different shapes after dusk. I count them anyway.', 'Mind the parapets at night.', 'The owls take the night shift. I just lock the gate.'],
+    },
+  },
+  {
+    name: 'Nix the Apprentice', tint: 0x7a2e2e, skin: 0xe0bfa0,
+    day: [[-7, 21, 8], [-10, 18, 6], [-7.7, 16.6, 1], [-7, 10, 8], [-4, 14, 6], [-7.7, 16.6, 1], [-4, 22, 8]],
+    night: [[-7, 22, 12], [-7.7, 16.6, 1], [-5.5, 6.8, 1], [0, 3, 4], [9, 0, 1], [14, 3, 12]],
+    lines: {
+      day: ['Do not drink anything green down here. That is the whole rule.', 'The cauldron bubbles when someone whispers nearby.', 'I stir. It glows. We have an understanding.'],
+      night: ['Potions settle at night. So do I, eventually.', 'If the dungeon glows, it is only the brew. Probably.', 'The kitchens at midnight are strictly professional. Strictly.'],
+    },
+  },
+];
+
+const npcs = NPC_DEFS.map(def => {
+  const fig = makeFigure(def.tint, def.skin);
+  const start = def.night[0];
+  fig.group.position.set(start[0], 0, start[1]);
+  scene.add(fig.group);
+  return { def, fig, x: start[0], z: start[1], route: def.night, i: 0, dwell: 0, stuck: 0, dayMode: false, cooldown: 0, speaking: 0 };
+});
+
+function updateNPCs(dt, t) {
+  const isDay = gDayFactor > 0.5;
+  let speakingNpc = null;
+  for (const n of npcs) {
+    if (isDay !== n.dayMode) { n.dayMode = isDay; n.route = isDay ? n.def.day : n.def.night; n.i = 0; n.dwell = 0; }
+    n.cooldown = Math.max(0, n.cooldown - dt);
+    n.speaking = Math.max(0, n.speaking - dt);
+    const dxP = camera.position.x - n.x, dzP = camera.position.z - n.z;
+    const distP = Math.hypot(dxP, dzP);
+    // react: pause, face the player, offer a line
+    if (distP < 2.4) {
+      n.fig.group.rotation.y = Math.atan2(dxP, dzP);
+      n.fig.head.rotation.x = 0.08 * Math.sin(t * 2);
+      if (n.cooldown <= 0 && n.speaking <= 0) {
+        const pool = isDay ? n.def.lines.day : n.def.lines.night;
+        n.line = pool[Math.floor(Math.random() * pool.length)];
+        n.speaking = 4.5;
+        n.cooldown = 18;
+      }
+      if (n.speaking > 0) speakingNpc = n;
+      n.dwell = 0.6;
+    } else if (n.speaking > 0) {
+      speakingNpc = n;
+    }
+    // movement along the route
+    if (n.dwell > 0) { n.dwell -= dt; n.fig.group.position.y = 0; }
+    else {
+      const wp = n.route[n.i];
+      const dx = wp[0] - n.x, dz = wp[1] - n.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 0.25) { n.i = (n.i + 1) % n.route.length; n.dwell = wp[2] || 2; }
+      else {
+        const step = Math.min(dist, 1.15 * dt);
+        const nx = n.x + dx / dist * step, nz = n.z + dz / dist * step;
+        const [cx, cz] = clampToRooms(nx, nz, n.x, n.z);
+        if (cx === n.x && cz === n.z) {
+          n.stuck += dt;
+          if (n.stuck > 1.2 && dist < 1.8) { n.x = wp[0]; n.z = wp[1]; n.stuck = 0; }        // door-margin snap
+          else if (n.stuck > 4) { n.i = (n.i + 1) % n.route.length; n.stuck = 0; }
+        } else { n.x = cx; n.z = cz; n.stuck = 0; }
+        n.fig.group.rotation.y = Math.atan2(dx, dz);
+        n.fig.group.position.y = 0.03 * Math.sin(t * 10);
+        n.fig.armL.rotation.x = 0.45 * Math.sin(t * 8);
+        n.fig.armR.rotation.x = -0.45 * Math.sin(t * 8);
+      }
+      n.fig.group.position.x = n.x;
+      n.fig.group.position.z = n.z;
+    }
+  }
+  // speech bubble follows the speaking resident's head
+  if (speakingNpc) {
+    const v = new THREE.Vector3(speakingNpc.x, 1.95, speakingNpc.z).project(camera);
+    if (v.z < 1) {
+      npcBubble.textContent = speakingNpc.line;
+      npcBubble.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
+      npcBubble.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight - 20}px`;
+      npcBubble.style.transform = 'translate(-50%, -100%)';
+      npcBubble.style.display = 'block';
+    } else npcBubble.style.display = 'none';
+  } else npcBubble.style.display = 'none';
+}
+
+// --- Procedural textures (generated in-browser at load; original art) ---
+function canvasTex(size, draw) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  draw(cv.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+function speckle(g, s, n, alpha) {
+  for (let i = 0; i < n; i++) {
+    const v = Math.random();
+    g.fillStyle = v < 0.5 ? `rgba(0,0,0,${alpha * Math.random()})` : `rgba(255,255,255,${alpha * 0.6 * Math.random()})`;
+    g.fillRect(Math.random() * s, Math.random() * s, 1 + Math.random() * 2, 1 + Math.random() * 2);
+  }
+}
+const stoneTex = canvasTex(512, (g, s) => {
+  g.fillStyle = '#453d33'; g.fillRect(0, 0, s, s);
+  const rows = 6, bh = s / rows;
+  for (let r = 0; r < rows; r++) {
+    let x = -(r % 2) * 40;
+    while (x < s) {
+      const bw = 70 + Math.random() * 50;
+      const shade = 0.82 + Math.random() * 0.3;
+      g.fillStyle = `rgb(${105 * shade | 0},${98 * shade | 0},${88 * shade | 0})`;
+      g.fillRect(x + 2, r * bh + 2, bw - 4, bh - 4);
+      g.fillStyle = 'rgba(255,255,255,0.07)';
+      g.fillRect(x + 2, r * bh + 2, bw - 4, 3);
+      g.fillStyle = 'rgba(0,0,0,0.12)';
+      g.fillRect(x + 2, (r + 1) * bh - 5, bw - 4, 3);
+      x += bw;
+    }
+  }
+  speckle(g, s, 2600, 0.16);
+});
+const flagTex = canvasTex(512, (g, s) => {
+  g.fillStyle = '#3d3831'; g.fillRect(0, 0, s, s);
+  const n = 4, cell = s / n;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const shade = 0.8 + Math.random() * 0.35;
+    const inset = 3 + Math.random() * 3;
+    g.fillStyle = `rgb(${108 * shade | 0},${102 * shade | 0},${92 * shade | 0})`;
+    g.fillRect(i * cell + inset, j * cell + inset, cell - inset * 2, cell - inset * 2);
+    g.fillStyle = 'rgba(0,0,0,0.10)';
+    for (let k = 0; k < 4; k++) g.fillRect(i * cell + Math.random() * cell, j * cell + Math.random() * cell, 8 + Math.random() * 20, 2);
+  }
+  speckle(g, s, 2200, 0.14);
+});
+const plankTex = canvasTex(512, (g, s) => {
+  g.fillStyle = '#2e2118'; g.fillRect(0, 0, s, s);
+  const rows = 8, bh = s / rows;
+  for (let r = 0; r < rows; r++) {
+    let x = -(r % 3) * 60;
+    while (x < s) {
+      const bw = 120 + Math.random() * 90;
+      const shade = 0.75 + Math.random() * 0.4;
+      g.fillStyle = `rgb(${115 * shade | 0},${82 * shade | 0},${54 * shade | 0})`;
+      g.fillRect(x + 1.5, r * bh + 1.5, bw - 3, bh - 3);
+      g.strokeStyle = 'rgba(60,38,20,0.5)';
+      for (let k = 0; k < 3; k++) {
+        const gy = r * bh + 4 + Math.random() * (bh - 8);
+        g.beginPath(); g.moveTo(x + 4, gy); g.bezierCurveTo(x + bw * 0.3, gy + 3, x + bw * 0.6, gy - 3, x + bw - 6, gy); g.stroke();
+      }
+      x += bw;
+    }
+  }
+  speckle(g, s, 1200, 0.10);
+});
+const grassTex = canvasTex(256, (g, s) => {
+  g.fillStyle = '#232d22'; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 5200; i++) {
+    const shade = Math.random();
+    g.fillStyle = shade < 0.5 ? 'rgba(14,22,14,0.5)' : 'rgba(52,72,44,0.4)';
+    g.fillRect(Math.random() * s, Math.random() * s, 1, 2 + Math.random() * 2);
+  }
+});
+grassTex.repeat.set(48, 48);
+function scaleUV(geo, ru, rv) {
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ru, uv.getY(i) * rv);
+}
+
 // --- Castle shell ---
-const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5f5952, roughness: 0.95 });
-const ceilMat = new THREE.MeshStandardMaterial({ color: 0x39332c, roughness: 1 });
+const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xb8aea0, roughness: 0.95 });
+const ceilMat = new THREE.MeshStandardMaterial({ map: plankTex, color: 0x7a6a56, roughness: 1 });
+const WOOD_FLOORS = new Set([1, 2, 7]);   // library, dormitory, common room
 ROOM_RECTS.forEach((r, i) => {
   const meta = ROOM_META[i];
   const w = r.x2 - r.x1, d = r.z2 - r.z1;
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4),
-    new THREE.MeshStandardMaterial({ color: meta.floor, roughness: 0.9 }));
+  const floorGeo = new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4);
+  scaleUV(floorGeo, (w + 0.4) / 4, (d + 0.4) / 4);
+  const floor = new THREE.Mesh(floorGeo,
+    new THREE.MeshStandardMaterial({ map: WOOD_FLOORS.has(i) ? plankTex : flagTex, color: meta.floor, roughness: 0.9 }));
   floor.position.set((r.x1 + r.x2) / 2, -0.1, (r.z1 + r.z2) / 2);
   scene.add(floor);
   if (meta.ceil) {
-    const c = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4), ceilMat);
+    const ceilGeo = new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4);
+    scaleUV(ceilGeo, (w + 0.4) / 4, (d + 0.4) / 4);
+    const c = new THREE.Mesh(ceilGeo, ceilMat);
     c.position.set((r.x1 + r.x2) / 2, meta.h, (r.z1 + r.z2) / 2);
     scene.add(c);
   }
 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260),
-  new THREE.MeshStandardMaterial({ color: 0x1c221c, roughness: 1 }));
+  new THREE.MeshStandardMaterial({ map: grassTex, color: 0xa8b8a0, roughness: 1 }));
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.22;
 scene.add(ground);
 
 for (const [x1, z1, x2, z2, h] of WALLS) {
   const len = Math.hypot(x2 - x1, z2 - z1);
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(len, h, 0.4), stoneMat);
+  const wallGeo = new THREE.BoxGeometry(len, h, 0.4);
+  scaleUV(wallGeo, len / 4, h / 4);
+  const wall = new THREE.Mesh(wallGeo, stoneMat);
   wall.position.set((x1 + x2) / 2, h / 2, (z1 + z2) / 2);
   wall.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
   scene.add(wall);
@@ -817,19 +1133,50 @@ function animate() {
     if (placed[id]) placed[id].object.rotation.z = Math.sin(t * 1.3 + id.length) * 0.04;
   }
 
-  // day-night: 6-minute cycle, night-favoured
+  // day-night: 6-minute cycle with real sunrise and sunset transitions
   {
-    const cyc = (Math.sin(t * (Math.PI * 2 / 360) - 1.2) + 1) / 2;   // 0..1 daylight amount
-    const day = Math.max(0, cyc - 0.25) / 0.75;                       // bias toward night
-    sun.intensity = day * 1.3;
-    moon.intensity = 0.6 - day * 0.25;
+    const ph = t * (Math.PI * 2 / 360) - 1.2;          // sun phase angle
+    const alt = Math.sin(ph);                           // sun elevation -1..1
+    const day = Math.min(1, Math.max(0, (alt - 0.04) / 0.3));          // smooth daylight factor
+    const twilight = Math.exp(-Math.pow(alt / 0.22, 2));               // peaks at horizon crossings
+    // sun + moon orbit the castle; light directions follow
+    sun.position.set(Math.cos(ph) * 70, alt * 55, -25);
+    sun.intensity = 1.35 * Math.min(1, Math.max(0, alt * 1.6));
+    sun.color.lerpColors(new THREE.Color(0xff7733), new THREE.Color(0xfff2cc), Math.min(1, Math.max(0, alt * 2.2)));
+    moon.position.set(-Math.cos(ph) * 70, -alt * 55, 25);
+    moon.intensity = Math.max(0.12, 0.6 - day * 0.25);
     hemi.intensity = 0.95 + day * 0.45;
-    const sky = new THREE.Color().lerpColors(new THREE.Color(0x0b0a16), new THREE.Color(0x87a5c9), day * 0.9);
+    // sky gradient: night <-> day, warmed at sunrise/sunset
+    const top = new THREE.Color().lerpColors(new THREE.Color(0x0b1026), new THREE.Color(0x6f9fd8), day);
+    const hor = new THREE.Color().lerpColors(new THREE.Color(0x1a2338), new THREE.Color(0xcfe4f0), day);
+    top.lerp(new THREE.Color(0x2e3a6e), twilight * 0.6);
+    hor.lerp(new THREE.Color(0xff9a5c), twilight * 0.85);
+    skyUni.top.value.copy(top);
+    skyUni.horizon.value.copy(hor);
+    const sky = new THREE.Color().lerpColors(hor, top, 0.5);
     scene.background = sky;
     scene.fog.color = sky;
+    // sun + moon discs
+    const sd = scene.getObjectByName('sunDisc');
+    if (sd) {
+      sd.position.copy(sun.position);
+      sd.lookAt(camera.position);
+      sd.material.opacity = Math.min(1, Math.max(0, alt * 3));
+      sd.material.color.copy(sun.color);
+    }
+    const md = scene.getObjectByName('moonDisc');
+    if (md) {
+      md.position.copy(moon.position);
+      md.lookAt(camera.position);
+      md.material.opacity = Math.min(0.95, Math.max(0, -alt * 2.5));
+    }
     const stars = scene.getObjectByName('stars');
     if (stars) stars.material.opacity = 0.9 * (1 - day);
+    gDayFactor = day;
   }
+
+  // residents: routines, reactions, dialogue
+  updateNPCs(dt, t);
 
   // ambient events
   if (AC && t > nextCrackle) { nextCrackle = t + 0.7 + Math.random() * 3.4; crackle(); }
@@ -870,7 +1217,7 @@ function animate() {
     }
   }
 
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 buildCastle();
