@@ -365,6 +365,26 @@ lightShaft(-8.5, 3.6, -3.5, 1, -0.62, 0.15, 7, 1.5, 0x8fb4e8, 0.05);    // hall 
 lightShaft(3.5, 3.6, -6.6, -0.1, -0.62, 1, 6.5, 1.3, 0xd88fb4, 0.045);  // stained-glass colour spill
 lightShaft(8.5, 4.8, 20.4, 0, -0.68, -1, 8, 1.7, 0x8fb4e8, 0.04);       // entrance arch beam
 
+// dust motes drifting inside the light shafts
+const dustMotes = [];
+function addDust(x, y, z, dx, dy, dz, len, r) {
+  const N = 70;
+  const pos = new Float32Array(N * 3);
+  const dir = new THREE.Vector3(dx, dy, dz).normalize();
+  const side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+  const up2 = new THREE.Vector3().crossVectors(side, dir).normalize();
+  const seeds = [];
+  for (let i = 0; i < N; i++) seeds.push({ t: Math.random(), a: Math.random() * Math.PI * 2, rr: Math.sqrt(Math.random()) * r * 0.8, sp: 0.008 + Math.random() * 0.02 });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xfff2d0, size: 0.035, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+  scene.add(new THREE.Points(geo, mat));
+  dustMotes.push({ pos, geo, seeds, ox: x, oy: y, oz: z, dir, side, up: up2, len });
+}
+addDust(-8.5, 3.6, -3.5, 1, -0.62, 0.15, 7, 1.5);
+addDust(3.5, 3.6, -6.6, -0.1, -0.62, 1, 6.5, 1.3);
+addDust(8.5, 4.8, 20.4, 0, -0.68, -1, 8, 1.7);
+
 // --- Castle residents (NPCs): robed figures with day/night routines and dialogue ---
 let gDayFactor = 0;
 const npcBubble = document.createElement('div');
@@ -386,7 +406,7 @@ function makeFigure(tint, skin) {
   armL.position.set(-0.3, 1.05, 0); armL.rotation.z = 0.25;
   const armR = armL.clone(); armR.position.x = 0.3; armR.rotation.z = -0.25;
   g.add(robe, shoulders, head, hood, armL, armR);
-  return { group: g, head, armL, armR };
+  return { group: g, head, hood, robe, shoulders, armL, armR };
 }
 
 const NPC_DEFS = [
@@ -395,8 +415,8 @@ const NPC_DEFS = [
     day: [[0, -4, 5], [6.5, 6.8, 1], [8.5, 12, 8], [12, 16, 6], [6.5, 6.8, 1], [0, 3, 8], [-4, 0, 6]],
     night: [[0, -5, 6], [6.5, 6.8, 1], [8.5, 10, 2], [15, 12, 1], [19, 12.5, 1], [24, 12.5, 12], [19, 12.5, 1], [15, 12, 1], [8.5, 10, 2], [6.5, 6.8, 1], [0, 0, 6]],
     lines: {
-      day: ['Mind the candles - they drift lower when the hall wakes.', 'The castle keeps its own hours. I only keep the fire.', 'The fountain remembered rain long before the west wall stood.'],
-      night: ['Late for a wander. The portraits talk more after dark.', 'The fire never quite goes out here. I check it anyway.', 'If a keepsake glows for you, leave it a whisper. It will keep it safe.'],
+      day: ['Mind the candles - they drift lower when the hall wakes.', 'The castle keeps its own hours. I only keep the fire.', 'The fountain remembered rain long before the west wall stood.', 'You walk like someone the castle wants to keep.', 'Supper smells reach the hall before the bell. They always have.'],
+      night: ['Late for a wander. The portraits talk more after dark.', 'The fire never quite goes out here. I check it anyway.', 'If a keepsake glows for you, leave it a whisper. It will keep it safe.', 'Night is when the old stones do their remembering.', 'Sleep well when you go. The hall keeps the embers for you.'],
     },
   },
   {
@@ -404,8 +424,8 @@ const NPC_DEFS = [
     day: [[-15, -3, 8], [-19, 3, 12], [-11, 2, 6], [-15, 4, 8], [-20, -3, 10]],
     night: [[-9, 0, 1], [0, 2, 3], [9, 0, 1], [15, 0, 12], [9, 0, 1], [0, -2, 3], [-9, 0, 1], [-15, 0, 8]],
     lines: {
-      day: ['Third shelf from the left remembers more than I do.', 'Quiet, please - the books are only pretending to sleep.', 'I catalogue what the castle chooses to recall.'],
-      night: ['Even the library dreams. Mostly index cards.', 'I read until the candles lean.', 'The dormitory beds argue less than the shelves.'],
+      day: ['Third shelf from the left remembers more than I do.', 'Quiet, please - the books are only pretending to sleep.', 'I catalogue what the castle chooses to recall.', 'Some pages hum when the sun moves. I mark those.', 'Every missing book comes back on its own, one shelf higher.'],
+      night: ['Even the library dreams. Mostly index cards.', 'I read until the candles lean.', 'The dormitory beds argue less than the shelves.', 'The moon reads over my shoulder. Slow reader.', 'Ink lasts longer than memory here. Write things down.'],
     },
   },
   {
@@ -413,8 +433,8 @@ const NPC_DEFS = [
     day: [[8.5, 12, 6], [12, 17, 8], [8.5, 19, 1], [8.5, 25, 8], [8.5, 19, 1], [6.5, 6.8, 1], [0, -2, 2], [-6.5, -6.6, 1], [-8, -12, 10], [-6.5, -6.6, 1], [0, -4, 2], [6.5, 6.8, 1]],
     night: [[8.5, 25, 10], [8.5, 19, 1], [6.5, 6.8, 1], [9, 0, 1], [15, 0, 14], [9, 0, 1], [6.5, 6.8, 1], [8.5, 19, 1]],
     lines: {
-      day: ['The fountain is older than the west wall. It remembers rain.', 'Owls had me up before the sun. They always win.', 'Grass grows slower where the castle watches.'],
-      night: ['The grounds keep different shapes after dusk. I count them anyway.', 'Mind the parapets at night.', 'The owls take the night shift. I just lock the gate.'],
+      day: ['The fountain is older than the west wall. It remembers rain.', 'Owls had me up before the sun. They always win.', 'Grass grows slower where the castle watches.', 'I planted the ivy by the gate. The gate had opinions.', 'Rain tomorrow, if the rooks are honest.'],
+      night: ['The grounds keep different shapes after dusk. I count them anyway.', 'Mind the parapets at night.', 'The owls take the night shift. I just lock the gate.', 'The fountain glows faint at night. Old water remembers stars.', 'Paths wander after dusk. Stick to the lit ones.'],
     },
   },
   {
@@ -422,8 +442,8 @@ const NPC_DEFS = [
     day: [[-7, 21, 8], [-10, 18, 6], [-7.7, 16.6, 1], [-7, 10, 8], [-4, 14, 6], [-7.7, 16.6, 1], [-4, 22, 8]],
     night: [[-7, 22, 12], [-7.7, 16.6, 1], [-5.5, 6.8, 1], [0, 3, 4], [9, 0, 1], [14, 3, 12]],
     lines: {
-      day: ['Do not drink anything green down here. That is the whole rule.', 'The cauldron bubbles when someone whispers nearby.', 'I stir. It glows. We have an understanding.'],
-      night: ['Potions settle at night. So do I, eventually.', 'If the dungeon glows, it is only the brew. Probably.', 'The kitchens at midnight are strictly professional. Strictly.'],
+      day: ['Do not drink anything green down here. That is the whole rule.', 'The cauldron bubbles when someone whispers nearby.', 'I stir. It glows. We have an understanding.', 'Apprentice rule two: label everything, trust nothing.', 'The pantry restocks itself. I stopped asking questions.'],
+      night: ['Potions settle at night. So do I, eventually.', 'If the dungeon glows, it is only the brew. Probably.', 'The kitchens at midnight are strictly professional. Strictly.', 'The brew dreams too. It snores in bubbles.', 'One day I will bottle a sunrise. For now, soup.'],
     },
   },
 ];
@@ -433,12 +453,28 @@ const npcs = NPC_DEFS.map(def => {
   const start = def.night[0];
   fig.group.position.set(start[0], 0, start[1]);
   scene.add(fig.group);
-  return { def, fig, x: start[0], z: start[1], route: def.night, i: 0, dwell: 0, stuck: 0, dayMode: false, cooldown: 0, speaking: 0 };
+  // floating name tag so visitors can tell the residents apart
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const cx2 = cv.getContext('2d');
+  cx2.font = '26px Georgia, serif'; cx2.textAlign = 'center'; cx2.textBaseline = 'middle';
+  cx2.shadowColor = 'rgba(0,0,0,0.9)'; cx2.shadowBlur = 6;
+  cx2.fillStyle = '#e8dcc2'; cx2.fillText(def.name, 128, 32);
+  const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
+  tag.scale.set(1.35, 0.34, 1); tag.position.y = 2.06;
+  fig.group.add(tag);
+  return { def, fig, x: start[0], z: start[1], route: def.night, i: 0, dwell: 0, stuck: 0, dayMode: false, cooldown: 0, speaking: 0, wave: 0, rotY: 0, seed: Math.random() * 10 };
 });
 
 function updateNPCs(dt, t) {
   const isDay = gDayFactor > 0.5;
   let speakingNpc = null;
+  const turnTo = (n, target, rate) => {
+    let d = target - n.rotY;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    n.rotY += d * Math.min(1, rate);
+    n.fig.group.rotation.y = n.rotY;
+  };
   for (const n of npcs) {
     if (isDay !== n.dayMode) { n.dayMode = isDay; n.route = isDay ? n.def.day : n.def.night; n.i = 0; n.dwell = 0; }
     n.cooldown = Math.max(0, n.cooldown - dt);
@@ -447,21 +483,36 @@ function updateNPCs(dt, t) {
     const distP = Math.hypot(dxP, dzP);
     // react: pause, face the player, offer a line
     if (distP < 2.4) {
-      n.fig.group.rotation.y = Math.atan2(dxP, dzP);
+      turnTo(n, Math.atan2(dxP, dzP), dt * 6);
       n.fig.head.rotation.x = 0.08 * Math.sin(t * 2);
+      n.fig.head.rotation.y = 0.1 * Math.sin(t * 1.1 + n.seed);
       if (n.cooldown <= 0 && n.speaking <= 0) {
         const pool = isDay ? n.def.lines.day : n.def.lines.night;
         n.line = pool[Math.floor(Math.random() * pool.length)];
         n.speaking = 4.5;
         n.cooldown = 18;
+        n.wave = 2.2;
       }
       if (n.speaking > 0) speakingNpc = n;
       n.dwell = 0.6;
     } else if (n.speaking > 0) {
       speakingNpc = n;
     }
+    // friendly wave while greeting, then settle
+    if (n.wave > 0) {
+      n.wave -= dt;
+      n.fig.armR.rotation.x = -2.1 + 0.3 * Math.sin(t * 7);
+    } else if (n.dwell > 0) {
+      n.fig.armR.rotation.x *= 0.9;
+      n.fig.armL.rotation.x *= 0.9;
+    }
     // movement along the route
-    if (n.dwell > 0) { n.dwell -= dt; n.fig.group.position.y = 0; }
+    if (n.dwell > 0) {
+      n.dwell -= dt; n.fig.group.position.y = 0;
+      n.fig.head.rotation.y = 0.5 * Math.sin(t * 0.5 + n.seed * 3);
+      n.fig.shoulders.scale.y = 0.7 * (1 + 0.05 * Math.sin(t * 1.7 + n.seed));
+      n.fig.robe.rotation.z = 0.03 * Math.sin(t * 0.9 + n.seed);
+    }
     else {
       const wp = n.route[n.i];
       const dx = wp[0] - n.x, dz = wp[1] - n.z;
@@ -476,7 +527,9 @@ function updateNPCs(dt, t) {
           if (n.stuck > 1.2 && dist < 1.8) { n.x = wp[0]; n.z = wp[1]; n.stuck = 0; }        // door-margin snap
           else if (n.stuck > 4) { n.i = (n.i + 1) % n.route.length; n.stuck = 0; }
         } else { n.x = cx; n.z = cz; n.stuck = 0; }
-        n.fig.group.rotation.y = Math.atan2(dx, dz);
+        turnTo(n, Math.atan2(dx, dz), dt * 7);
+        n.fig.robe.rotation.z = 0.07 * Math.sin(t * 8);
+        n.fig.head.rotation.y = 0.14 * Math.sin(t * 1.3 + n.seed);
         n.fig.group.position.y = 0.03 * Math.sin(t * 10);
         n.fig.armL.rotation.x = 0.45 * Math.sin(t * 8);
         n.fig.armR.rotation.x = -0.45 * Math.sin(t * 8);
@@ -1072,6 +1125,24 @@ function animate() {
     const L = fireLights[i];
     L.intensity = L.userData.base ??= L.intensity;
     L.intensity = L.userData.base * (0.9 + 0.18 * Math.sin(t * 9 + i * 1.7) * Math.sin(t * 5.3 + i)) * (1 + (1 - gDayFactor) * 0.9);
+  }
+
+  // dust motes drift along the shafts
+  {
+    const _v = new THREE.Vector3();
+    for (const d of dustMotes) {
+      for (let i = 0; i < d.seeds.length; i++) {
+        const m = d.seeds[i];
+        m.t += m.sp * dt * 10; if (m.t > 1) m.t -= 1;
+        const wob = 0.12 * Math.sin(t * 1.5 + i);
+        _v.set(d.ox, d.oy, d.oz)
+          .addScaledVector(d.dir, m.t * d.len)
+          .addScaledVector(d.side, (m.rr + wob) * Math.cos(m.a))
+          .addScaledVector(d.up, m.rr * Math.sin(m.a));
+        d.pos[i * 3] = _v.x; d.pos[i * 3 + 1] = _v.y; d.pos[i * 3 + 2] = _v.z;
+      }
+      d.geo.attributes.position.needsUpdate = true;
+    }
   }
 
   // floating candles bob + flames shiver
