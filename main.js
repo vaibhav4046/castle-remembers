@@ -288,6 +288,22 @@ const GradeShader = {
 };
 composer.addPass(new ShaderPass(GradeShader));
 
+// --- Cached environment fill (PMREM, generated once from a tiny lighting scene) ---
+const archMats = [];
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = new THREE.Scene();
+  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 16, 12), new THREE.MeshBasicMaterial({ color: 0x35405c, side: THREE.BackSide })));
+  const warmP = new THREE.Mesh(new THREE.PlaneGeometry(26, 10), new THREE.MeshBasicMaterial({ color: 0xff9a55 }));
+  warmP.position.set(-12, 5, -18); warmP.lookAt(0, 0, 0); envScene.add(warmP);
+  const coolP = new THREE.Mesh(new THREE.PlaneGeometry(36, 18), new THREE.MeshBasicMaterial({ color: 0x6f87c0 }));
+  coolP.position.set(20, 12, 12); coolP.lookAt(0, 0, 0); envScene.add(coolP);
+  const gnd = new THREE.Mesh(new THREE.CircleGeometry(40, 16), new THREE.MeshBasicMaterial({ color: 0x2a2118 }));
+  gnd.rotation.x = -Math.PI / 2; gnd.position.y = -5; envScene.add(gnd);
+  scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+  pmrem.dispose();
+}
+
 // --- Atmosphere lights (day-night cycle driven) ---
 const hemi = new THREE.HemisphereLight(0x41527a, 0x2b2016, 0.95);
 scene.add(hemi);
@@ -739,8 +755,8 @@ function scaleUV(geo, ru, rv) {
 }
 
 // --- Castle shell ---
-const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, bumpMap: bumpOf(stoneTex), bumpScale: 0.5, roughnessMap: roughTex(256, 235, 40), color: 0xb8aea0, roughness: 1 });
-const ceilMat = new THREE.MeshStandardMaterial({ map: plankTex, bumpMap: bumpOf(plankTex), bumpScale: 0.4, roughnessMap: roughTex(256, 245, 25), color: 0x7a6a56, roughness: 1 });
+const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, bumpMap: bumpOf(stoneTex), bumpScale: 0.5, roughnessMap: roughTex(256, 235, 40), color: 0xb8aea0, roughness: 1, envMapIntensity: 0.55 });
+const ceilMat = new THREE.MeshStandardMaterial({ map: plankTex, bumpMap: bumpOf(plankTex), bumpScale: 0.4, roughnessMap: roughTex(256, 245, 25), color: 0x7a6a56, roughness: 1, envMapIntensity: 0.55 });
 const WOOD_FLOORS = new Set([1, 2, 7]);   // library, dormitory, common room
 ROOM_RECTS.forEach((r, i) => {
   const meta = ROOM_META[i];
@@ -748,7 +764,7 @@ ROOM_RECTS.forEach((r, i) => {
   const floorGeo = new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4);
   scaleUV(floorGeo, (w + 0.4) / 4, (d + 0.4) / 4);
   const floor = new THREE.Mesh(floorGeo,
-    new THREE.MeshStandardMaterial({ map: WOOD_FLOORS.has(i) ? plankTex : flagTex, bumpMap: WOOD_FLOORS.has(i) ? bumpOf(plankTex) : bumpOf(flagTex), bumpScale: 0.4, roughnessMap: roughTex(256, 240, 30), color: meta.floor, roughness: 1 }));
+    new THREE.MeshStandardMaterial({ map: WOOD_FLOORS.has(i) ? plankTex : flagTex, bumpMap: WOOD_FLOORS.has(i) ? bumpOf(plankTex) : bumpOf(flagTex), bumpScale: 0.4, roughnessMap: roughTex(256, 240, 30), color: meta.floor, roughness: 1, envMapIntensity: 0.6 }));
   floor.position.set((r.x1 + r.x2) / 2, -0.1, (r.z1 + r.z2) / 2);
   scene.add(floor);
   if (meta.ceil) {
@@ -760,7 +776,7 @@ ROOM_RECTS.forEach((r, i) => {
   }
 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260),
-  new THREE.MeshStandardMaterial({ map: grassTex, color: 0xa8b8a0, roughness: 1 }));
+  new THREE.MeshStandardMaterial({ map: grassTex, color: 0xa8b8a0, roughness: 1, envMapIntensity: 0.5 }));
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.22;
 scene.add(ground);
