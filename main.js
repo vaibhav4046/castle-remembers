@@ -266,6 +266,7 @@ addEventListener('resize', () => {
 
 // --- Post-processing: bloom + warm colour grade + vignette (Hogwarts-Legacy-style mood) ---
 const NOBLOOM = new URLSearchParams(location.search).has('nobloom');
+const TOD = new URLSearchParams(location.search).get('tod'); // 'day'|'night' locks the sky for demos/QA
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.65, 0.72);
@@ -409,6 +410,45 @@ function makeFigure(tint, skin) {
   return { group: g, head, hood, robe, shoulders, armL, armR };
 }
 
+// fake contact shadows: radial-gradient blob planes (no shadow-map cost)
+const blobTex = (() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const g = cv.getContext('2d');
+  const rg = g.createRadialGradient(64, 64, 6, 64, 64, 62);
+  rg.addColorStop(0, 'rgba(0,0,0,0.6)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(cv);
+})();
+function blobShadow(x, z, r, op, parent) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 2, r * 2),
+    new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, opacity: op, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set(x, 0.025, z);
+  (parent || scene).add(m);
+  return m;
+}
+blobShadow(0, -5.6, 2.6, 0.42);      // great-hall fireplace
+blobShadow(0, 0, 1.1, 0.35);         // hall centre table area
+blobShadow(-7, 21, 1.8, 0.4);        // dungeon cauldron
+blobShadow(8.5, 13.5, 3.2, 0.35);    // fountain base
+
+// low drifting mist cards (original soft-gradient texture)
+const mistTex = (() => {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+  const g = cv.getContext('2d');
+  const rg = g.createRadialGradient(128, 64, 8, 128, 64, 120);
+  rg.addColorStop(0, 'rgba(255,255,255,0.75)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, 256, 128);
+  return new THREE.CanvasTexture(cv);
+})();
+const mists = [];
+for (const [mx, mz, mw, md, mo] of [[8.5, 16, 8, 6, 0.10], [12.5, 13.5, 6, 5, 0.08], [10, 25.5, 9, 6, 0.09], [0, -3, 7, 5, 0.06]]) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(mw, md),
+    new THREE.MeshBasicMaterial({ map: mistTex, color: 0xcfd8e8, transparent: true, opacity: mo, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set(mx, 0.18, mz);
+  m.userData.op = mo;
+  scene.add(m); mists.push(m);
+}
+
 const NPC_DEFS = [
   {
     name: 'Maren the Keeper', tint: 0x6b4a8a, skin: 0xd9b08c,
@@ -450,6 +490,7 @@ const NPC_DEFS = [
 
 const npcs = NPC_DEFS.map(def => {
   const fig = makeFigure(def.tint, def.skin);
+  blobShadow(0, 0, 0.55, 0.45, fig.group);
   const start = def.night[0];
   fig.group.position.set(start[0], 0, start[1]);
   scene.add(fig.group);
@@ -538,6 +579,19 @@ function updateNPCs(dt, t) {
       n.fig.group.position.z = n.z;
     }
   }
+  // gentle separation so residents never overlap
+  for (let a = 0; a < npcs.length; a++) for (let b = a + 1; b < npcs.length; b++) {
+    const A = npcs[a], B = npcs[b];
+    const sdx = B.x - A.x, sdz = B.z - A.z, sd = Math.hypot(sdx, sdz);
+    if (sd < 0.7 && sd > 1e-4) {
+      const push = (0.7 - sd) / 2, ux = sdx / sd, uz = sdz / sd;
+      const [ax, az] = clampToRooms(A.x - ux * push, A.z - uz * push, A.x, A.z);
+      const [bx, bz] = clampToRooms(B.x + ux * push, B.z + uz * push, B.x, B.z);
+      A.x = ax; A.z = az; B.x = bx; B.z = bz;
+      A.fig.group.position.x = ax; A.fig.group.position.z = az;
+      B.fig.group.position.x = bx; B.fig.group.position.z = bz;
+    }
+  }
   // speech bubble follows the speaking resident's head
   if (speakingNpc) {
     const v = new THREE.Vector3(speakingNpc.x, 1.95, speakingNpc.z).project(camera);
@@ -560,6 +614,37 @@ function canvasTex(size, draw) {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
+  return t;
+}
+// luminance bump map derived from an existing color canvas (guaranteed alignment)
+function bumpOf(tex) {
+  const src = tex.image, sz = src.width;
+  const cv = document.createElement('canvas'); cv.width = cv.height = sz;
+  const g = cv.getContext('2d'); g.drawImage(src, 0, 0);
+  const d = g.getImageData(0, 0, sz, sz), px = d.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const l = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+    px[i] = px[i + 1] = px[i + 2] = l;
+  }
+  g.putImageData(d, 0, 0);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+// broad blotch roughness map: base gray with soft lighter/darker patches
+function roughTex(size, base, amp) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+  g.fillStyle = `rgb(${base},${base},${base})`; g.fillRect(0, 0, size, size);
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * size, y = Math.random() * size, r = 20 + Math.random() * 70;
+    const v = Math.max(0, Math.min(255, base + (Math.random() - 0.5) * 2 * amp)) | 0;
+    const rg = g.createRadialGradient(x, y, 2, x, y, r);
+    rg.addColorStop(0, `rgba(${v},${v},${v},0.5)`); rg.addColorStop(1, `rgba(${v},${v},${v},0)`);
+    g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
 function speckle(g, s, n, alpha) {
@@ -636,8 +721,8 @@ function scaleUV(geo, ru, rv) {
 }
 
 // --- Castle shell ---
-const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xb8aea0, roughness: 0.95 });
-const ceilMat = new THREE.MeshStandardMaterial({ map: plankTex, color: 0x7a6a56, roughness: 1 });
+const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, bumpMap: bumpOf(stoneTex), bumpScale: 0.5, roughnessMap: roughTex(256, 235, 40), color: 0xb8aea0, roughness: 1 });
+const ceilMat = new THREE.MeshStandardMaterial({ map: plankTex, bumpMap: bumpOf(plankTex), bumpScale: 0.4, roughnessMap: roughTex(256, 245, 25), color: 0x7a6a56, roughness: 1 });
 const WOOD_FLOORS = new Set([1, 2, 7]);   // library, dormitory, common room
 ROOM_RECTS.forEach((r, i) => {
   const meta = ROOM_META[i];
@@ -645,7 +730,7 @@ ROOM_RECTS.forEach((r, i) => {
   const floorGeo = new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4);
   scaleUV(floorGeo, (w + 0.4) / 4, (d + 0.4) / 4);
   const floor = new THREE.Mesh(floorGeo,
-    new THREE.MeshStandardMaterial({ map: WOOD_FLOORS.has(i) ? plankTex : flagTex, color: meta.floor, roughness: 0.9 }));
+    new THREE.MeshStandardMaterial({ map: WOOD_FLOORS.has(i) ? plankTex : flagTex, bumpMap: WOOD_FLOORS.has(i) ? bumpOf(plankTex) : bumpOf(flagTex), bumpScale: 0.4, roughnessMap: roughTex(256, 240, 30), color: meta.floor, roughness: 1 }));
   floor.position.set((r.x1 + r.x2) / 2, -0.1, (r.z1 + r.z2) / 2);
   scene.add(floor);
   if (meta.ceil) {
@@ -1145,6 +1230,13 @@ function animate() {
     }
   }
 
+  // mist cards drift and breathe
+  for (let i = 0; i < mists.length; i++) {
+    const m = mists[i];
+    m.position.x += Math.sin(t * 0.07 + i * 2.1) * 0.0012;
+    m.material.opacity = m.userData.op * (0.8 + 0.2 * Math.sin(t * 0.23 + i * 1.7));
+  }
+
   // floating candles bob + flames shiver
   for (const c of candleData) {
     c.obj.position.y = c.baseY + Math.sin(t * 0.7 + c.ph) * c.amp;
@@ -1207,7 +1299,7 @@ function animate() {
 
   // day-night: 6-minute cycle with real sunrise and sunset transitions
   {
-    const ph = t * (Math.PI * 2 / 360) + 0.15;   // start at golden sunrise so first load is lit          // sun phase angle
+    const ph = TOD === 'day' ? 1.0 : TOD === 'night' ? 4.0 : t * (Math.PI * 2 / 360) + 0.15;   // start at golden sunrise so first load is lit          // sun phase angle
     const alt = Math.sin(ph);                           // sun elevation -1..1
     const day = Math.min(1, Math.max(0, (alt - 0.04) / 0.3));          // smooth daylight factor
     const twilight = Math.exp(-Math.pow(alt / 0.22, 2));               // peaks at horizon crossings
