@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Castle That Remembers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0a12; font-family: Georgia, 'Times New Roman', serif; }
+  #app { width: 100%; height: 100%; }
+  canvas { display: block; }
+
+  #loader {
+    position: fixed; inset: 0; background: #0b0a12; z-index: 50;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #d8c9a3; transition: opacity 1s;
+  }
+  #loader h1 { font-size: 2.2rem; letter-spacing: 0.15em; font-weight: normal; margin-bottom: 0.6rem; }
+  #loader p.sub { color: #8a7d5f; font-style: italic; margin-bottom: 2rem; }
+  #bar-wrap { width: 320px; height: 6px; background: #241f18; border: 1px solid #4a3f2c; border-radius: 3px; }
+  #bar { width: 0%; height: 100%; background: linear-gradient(90deg, #b98a3c, #e8c576); border-radius: 3px; transition: width 0.3s; }
+  #load-status { margin-top: 0.8rem; font-size: 0.85rem; color: #8a7d5f; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: none; }
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 6px; height: 6px; border-radius: 50%; background: rgba(232,197,118,0.9);
+    box-shadow: 0 0 6px rgba(232,197,118,0.6);
+  }
+  #prompt {
+    position: absolute; left: 50%; top: 58%; transform: translateX(-50%);
+    color: #e8c576; font-size: 1.05rem; text-shadow: 0 1px 4px #000;
+    background: rgba(11,10,18,0.55); padding: 0.4rem 1rem; border-radius: 4px; display: none;
+  }
+  #toast {
+    position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
+    color: #d8c9a3; font-style: italic; font-size: 1rem; text-shadow: 0 1px 4px #000;
+    background: rgba(11,10,18,0.6); padding: 0.5rem 1.2rem; border-radius: 4px; display: none;
+    max-width: 70%; text-align: center;
+  }
+  #title-card {
+    position: absolute; left: 50%; top: 12%; transform: translateX(-50%);
+    color: #d8c9a3; text-align: center; text-shadow: 0 2px 8px #000; transition: opacity 2s;
+  }
+  #title-card h1 { font-size: 1.8rem; letter-spacing: 0.2em; font-weight: normal; }
+  #title-card p { color: #8a7d5f; font-style: italic; margin-top: 0.3rem; }
+  #help {
+    position: absolute; left: 1rem; bottom: 1rem; color: rgba(216,201,163,0.55);
+    font-size: 0.8rem; line-height: 1.5; text-shadow: 0 1px 3px #000;
+  }
+
+  #modal {
+    position: fixed; inset: 0; background: rgba(5,4,10,0.88); z-index: 40;
+    display: none; align-items: center; justify-content: center;
+  }
+  #modal-card {
+    background: #171320; border: 1px solid #4a3f2c; border-radius: 8px;
+    padding: 2rem 2.4rem; max-width: 480px; color: #d8c9a3; text-align: center;
+  }
+  #modal-card h2 { font-weight: normal; letter-spacing: 0.1em; margin-bottom: 0.5rem; color: #e8c576; }
+  #modal-card p.desc { color: #8a7d5f; font-style: italic; font-size: 0.9rem; margin-bottom: 1.4rem; }
+  #modal-card button {
+    font-family: inherit; background: #2a2136; color: #e8c576; border: 1px solid #6b5a38;
+    padding: 0.55rem 1.3rem; margin: 0 0.3rem; border-radius: 4px; cursor: pointer; font-size: 0.95rem;
+  }
+  #modal-card button:hover { background: #3a2d4a; }
+  #modal-card button:disabled { opacity: 0.4; cursor: default; }
+  #modal-status { margin-top: 1rem; min-height: 1.4rem; color: #b0987a; font-size: 0.9rem; }
+  #modal-status.recording { color: #e87d6a; }
+  #modal-text {
+    width: 100%; margin-top: 0.8rem; background: #0f0c16; color: #d8c9a3;
+    border: 1px solid #4a3f2c; border-radius: 4px; padding: 0.5rem; font-family: inherit;
+    display: none; resize: vertical; min-height: 60px;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="loader">
+  <h1>THE CASTLE THAT REMEMBERS</h1>
+  <p class="sub">Eleven halls and towers. Sixteen keepsakes. Every one is listening.</p>
+  <div id="bar-wrap"><div id="bar"></div></div>
+  <div id="load-status">Waking the stones...</div>
+</div>
+
+<div id="hud">
+  <div id="title-card">
+    <h1>THE CASTLE THAT REMEMBERS</h1>
+    <p>From the dungeons to the astronomy tower, the keepsakes are listening.</p>
+  </div>
+  <div id="crosshair"></div>
+  <div id="prompt"></div>
+  <div id="toast"></div>
+  <div id="help">Click to look around &middot; WASD to walk &middot; Shift to run &middot; E to touch a keepsake &middot; Esc to release the mouse</div>
+</div>
+
+<div id="modal">
+  <div id="modal-card">
+    <h2 id="modal-title">Keepsake</h2>
+    <p class="desc" id="modal-desc"></p>
+    <div>
+      <button id="btn-record">Whisper a memory</button>
+      <button id="btn-stop" disabled>Seal it</button>
+      <button id="btn-close">Step back</button>
+    </div>
+    <textarea id="modal-text" placeholder="Type your memory..."></textarea>
+    <div id="modal-status"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/loaders/GLTFLoader.js": "./vendor/loaders/GLTFLoader.js",
+    "three/addons/libs/meshopt_decoder.module.js": "./vendor/libs/meshopt_decoder.module.js"
+  }
+}
+</script>
+<script type="module" src="./main.js?v=7"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "projects": {},
+  "targets": {
+    "private-pages": {
+      "hosting": {
+        "castle": [
+          "castle-remembers"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
