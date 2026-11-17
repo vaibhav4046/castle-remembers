@@ -291,7 +291,7 @@ composer.addPass(new ShaderPass(GradeShader));
 // --- Atmosphere lights (day-night cycle driven) ---
 const hemi = new THREE.HemisphereLight(0x41527a, 0x2b2016, 0.95);
 scene.add(hemi);
-scene.add(new THREE.AmbientLight(0x46538a, 0.55));
+const ambNight = new THREE.AmbientLight(0x46538a, 0.55); scene.add(ambNight);
 const moon = new THREE.DirectionalLight(0x8fa3cc, 0.6);
 moon.position.set(20, 30, 25);
 scene.add(moon);
@@ -302,6 +302,11 @@ for (const [x, y, z, i, d] of LIGHTS) {
   const pl = new THREE.PointLight(0xffb066, i * 1.8, d * 1.4, 1.8);
   pl.position.set(x, y, z);
   scene.add(pl);
+}
+for (const [x, y, z, i, d] of [[2, 2.6, 2.5, 1.5, 11], [11.5, 3.4, 24, 1.6, 12], [-15, 3.0, 1.5, 1.2, 10], [18, 2.8, 1, 1.2, 10]]) {
+  const fill = new THREE.PointLight(0xffc080, i, d, 1.8);
+  fill.position.set(x, y, z);
+  scene.add(fill);
 }
 const fireLights = scene.children.filter(o => o.isPointLight);
 
@@ -406,7 +411,20 @@ function makeFigure(tint, skin) {
   const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.62, 8), robeMat);
   armL.position.set(-0.3, 1.05, 0); armL.rotation.z = 0.25;
   const armR = armL.clone(); armR.position.x = 0.3; armR.rotation.z = -0.25;
-  g.add(robe, shoulders, head, hood, armL, armR);
+  // hem flare, belt, hands and eyes for a less plain silhouette
+  const hem = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.55, 12), robeMat);
+  hem.position.y = 0.28;
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.24, 0.09, 12), new THREE.MeshStandardMaterial({ color: 0x2a221c, roughness: 0.8 }));
+  belt.position.y = 0.95;
+  const handMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7 });
+  const handL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), handMat);
+  handL.position.set(-0.38, 0.72, 0.06);
+  const handR = handL.clone(); handR.position.x = 0.38;
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.4 });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 5), eyeMat);
+  eyeL.position.set(-0.055, 1.58, 0.13);
+  const eyeR = eyeL.clone(); eyeR.position.x = 0.055;
+  g.add(robe, shoulders, head, hood, armL, armR, hem, belt, handL, handR, eyeL, eyeR);
   return { group: g, head, hood, robe, shoulders, armL, armR };
 }
 
@@ -1209,7 +1227,7 @@ function animate() {
   for (let i = 0; i < fireLights.length; i++) {
     const L = fireLights[i];
     L.intensity = L.userData.base ??= L.intensity;
-    L.intensity = L.userData.base * (0.9 + 0.18 * Math.sin(t * 9 + i * 1.7) * Math.sin(t * 5.3 + i)) * (1 + (1 - gDayFactor) * 0.9);
+    L.intensity = L.userData.base * (0.9 + 0.18 * Math.sin(t * 9 + i * 1.7) * Math.sin(t * 5.3 + i)) * (1 + (1 - gDayFactor) * 1.5);
   }
 
   // dust motes drift along the shafts
@@ -1310,6 +1328,7 @@ function animate() {
     moon.position.set(-Math.cos(ph) * 70, -alt * 55, 25);
     moon.intensity = Math.max(0.55, 0.8 - day * 0.25);
     hemi.intensity = 1.1 + day * 0.4;
+    ambNight.intensity = 0.55 + (1 - day) * 0.35;
     // sky gradient: night <-> day, warmed at sunrise/sunset
     const top = new THREE.Color().lerpColors(new THREE.Color(0x0b1026), new THREE.Color(0x6f9fd8), day);
     const hor = new THREE.Color().lerpColors(new THREE.Color(0x1a2338), new THREE.Color(0xcfe4f0), day);
