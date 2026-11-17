@@ -289,7 +289,7 @@ composer.addPass(new ShaderPass(GradeShader));
 // --- Atmosphere lights (day-night cycle driven) ---
 const hemi = new THREE.HemisphereLight(0x41527a, 0x2b2016, 0.95);
 scene.add(hemi);
-scene.add(new THREE.AmbientLight(0x3d4a66, 0.4));
+scene.add(new THREE.AmbientLight(0x46538a, 0.55));
 const moon = new THREE.DirectionalLight(0x8fa3cc, 0.6);
 moon.position.set(20, 30, 25);
 scene.add(moon);
@@ -1070,7 +1070,7 @@ function animate() {
   for (let i = 0; i < fireLights.length; i++) {
     const L = fireLights[i];
     L.intensity = L.userData.base ??= L.intensity;
-    L.intensity = L.userData.base * (0.9 + 0.18 * Math.sin(t * 9 + i * 1.7) * Math.sin(t * 5.3 + i));
+    L.intensity = L.userData.base * (0.9 + 0.18 * Math.sin(t * 9 + i * 1.7) * Math.sin(t * 5.3 + i)) * (1 + (1 - gDayFactor) * 0.9);
   }
 
   // floating candles bob + flames shiver
@@ -1135,7 +1135,7 @@ function animate() {
 
   // day-night: 6-minute cycle with real sunrise and sunset transitions
   {
-    const ph = t * (Math.PI * 2 / 360) - 1.2;          // sun phase angle
+    const ph = t * (Math.PI * 2 / 360) + 0.15;   // start at golden sunrise so first load is lit          // sun phase angle
     const alt = Math.sin(ph);                           // sun elevation -1..1
     const day = Math.min(1, Math.max(0, (alt - 0.04) / 0.3));          // smooth daylight factor
     const twilight = Math.exp(-Math.pow(alt / 0.22, 2));               // peaks at horizon crossings
@@ -1144,8 +1144,8 @@ function animate() {
     sun.intensity = 1.35 * Math.min(1, Math.max(0, alt * 1.6));
     sun.color.lerpColors(new THREE.Color(0xff7733), new THREE.Color(0xfff2cc), Math.min(1, Math.max(0, alt * 2.2)));
     moon.position.set(-Math.cos(ph) * 70, -alt * 55, 25);
-    moon.intensity = Math.max(0.12, 0.6 - day * 0.25);
-    hemi.intensity = 0.95 + day * 0.45;
+    moon.intensity = Math.max(0.55, 0.8 - day * 0.25);
+    hemi.intensity = 1.1 + day * 0.4;
     // sky gradient: night <-> day, warmed at sunrise/sunset
     const top = new THREE.Color().lerpColors(new THREE.Color(0x0b1026), new THREE.Color(0x6f9fd8), day);
     const hor = new THREE.Color().lerpColors(new THREE.Color(0x1a2338), new THREE.Color(0xcfe4f0), day);
@@ -1228,6 +1228,7 @@ animate();
 window.__castle = {
   roomCenters: ROOM_RECTS.map(r => [(r.x1 + r.x2) / 2, (r.z1 + r.z2) / 2]),
   setView(x, y, z, yw, pt) { camera.position.set(x, y, z); yaw = yw; pitch = pt; },
+  npcInfo() { return npcs.map(n => ({ name: n.def.name, x: +n.x.toFixed(2), z: +n.z.toFixed(2), bubble: npcBubble.style.display === 'block', line: npcBubble.style.display === 'block' ? npcBubble.textContent : null })); },
   keepsakeInfo() {
     const v = new THREE.Vector3();
     return Object.entries(keepsakes).map(([id, k]) => {
